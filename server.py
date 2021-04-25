@@ -1,3 +1,4 @@
+from datetime import datetime
 import socket
 import mimetypes
 import os
@@ -35,24 +36,52 @@ def mountHTMLLink(href, name):
 
 def listDirs(baseDir):
     htmlResponse = '<div class="dirLinks">'
-    htmlResponse += '<h4>Abaixo está a listagem de arquivos disponíveis nesse diretório:</h4>'
+    htmlResponse += '<h4>Abaixo está a listagem de arquivos disponíveis nesse diretório.</h4><br />'
+    htmlResponse += '<h4>Diretório {0}</h4>'.format(baseDir)
+    
+    htmlResponse += '<table>'
     
     allDirInfo = os.walk(URL_SRC_BASE + baseDir)
     atualDirInfo = next(allDirInfo)
     
-    #path = atualDirInfo[0]
+    path = atualDirInfo[0]
     subdirsList = atualDirInfo[1]
     files = atualDirInfo[2]
+    
+    if len(files) > 0 or len(subdirsList) > 0:
+        htmlResponse += '<tr>'
+        htmlResponse += '<td>Nome</td>'
+        htmlResponse += '<td>Última modificação</td>'
+        htmlResponse += '<td>Tamanho</td>'
+        htmlResponse += '</tr>'
+    else:
+        htmlResponse += '<tr>'
+        htmlResponse += '<td>Nenhum arquivo ou sub diretório encontrado</td>'
+        htmlResponse += '</tr>'
     
     for subdir in subdirsList:
         subdirHref = baseDir + subdir
         subdirTitle = "/{0}".format(subdir)
-        htmlResponse += mountHTMLLink(subdirHref, subdirTitle)
+        
+        htmlResponse += '<tr>'
+        htmlResponse += '<td>{0}</td>'.format(mountHTMLLink(subdirHref, subdirTitle))
+        htmlResponse += '<td>{0}</td>'.format('')
+        htmlResponse += '<td>{0}</td>'.format('')
+        htmlResponse += '</tr>'
     
     for name in files:
+        filePath  = os.path.join(path, name)
+        size = os.path.getsize(filePath)
+        lastModified = os.path.getmtime(filePath)
         fileHref = '{0}/{1}'.format(baseDir, name)
-        htmlResponse += mountHTMLLink(fileHref, name)
+        
+        htmlResponse += '<tr>'
+        htmlResponse += '<td>{0}</td>'.format(mountHTMLLink(fileHref, name))
+        htmlResponse += '<td>{0}</td>'.format(datetime.utcfromtimestamp(lastModified).strftime('%Y-%m-%d %H:%M:%S'))
+        htmlResponse += '<td>{0}</td>'.format(size)
+        htmlResponse += '</tr>'
             
+    htmlResponse += '</table>'
     htmlResponse += '</div>'
     return htmlResponse
 
@@ -87,7 +116,13 @@ while True:
         except FileNotFoundError:
             responseCode = 404
         except IsADirectoryError:
-            responseCode = 404
+            if os.path.exists(URL_SRC_BASE + url + '/index.html'):
+                fileURL = URL_SRC_BASE + url + '/index.html'
+                file = open(fileURL, "rb")
+                mimeType = mimetypes.guess_type(fileURL);
+            else:
+                responseCode = 404
+                    
         
         if responseCode == 200:
             fileContents = file.read()
