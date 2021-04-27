@@ -9,8 +9,11 @@ SERVER_PORT = 8080
 URL_DEFAULT_BASE = './default'
 URL_SRC_BASE = './src'
 
+URL_400 = URL_DEFAULT_BASE + '/400.html'
 URL_404 = URL_DEFAULT_BASE + '/404.html'
 URL_500 = URL_DEFAULT_BASE + '/500.html'
+URL_501 = URL_DEFAULT_BASE + '/501.html'
+URL_505 = URL_DEFAULT_BASE + '/505.html'
 
 serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 serverSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -18,17 +21,25 @@ serverSocket.bind((SERVER_HOST, SERVER_PORT))
 serverSocket.listen(1)
 print('Listening on port {} ...'.format(SERVER_PORT))
 
+if not os.path.exists(URL_SRC_BASE):
+    os.makedirs(URL_SRC_BASE)
+
 # reading default pages
-fileNotFoundTemplate = open(URL_404)
-fileNotFoundContent = fileNotFoundTemplate.read()
-
-internalServerErrorTemplate = open(URL_500)
-internalServerErrorFileContent = internalServerErrorTemplate.read()
-
+defaultFileContent = {
+    400: (open(URL_400)).read(),
+    404: (open(URL_404)).read(),
+    500: (open(URL_500)).read(),
+    501: (open(URL_501)).read(),
+    505: (open(URL_505)).read()
+}
+    
 messageCode = {
     200: "OK",
+    400: "BAD REQUEST",
     404: "NOT FOUND",
-    500: "INTERNAL SERVER ERROR"
+    500: "INTERNAL SERVER ERROR",
+    501: "NOT IMPLEMENTED",
+    505: "HTTP VERSION NOT SUPPORTED"
 }
 
 def mountHTMLLink(href, name):
@@ -94,54 +105,63 @@ while True:
     linhas = request.strip().split('\r\n')
     linha1Colunas = linhas[0].split(' ')
     
-    method = linha1Colunas[0]
-    url = linha1Colunas[1]
-    versionType = linha1Colunas[2]
-
-    if method != 'GET':
-        raise Exception('501 Not Implemented')
-    elif versionType != 'HTTP/1.1':
-        raise Exception('505 HTTP Version Not Supported')
-    else:
-        print('A requisicao possui suporte por esse servidor e a URL requisitada foi: {}'.format(url))
-        
     responseCode = 200
     mimeType = "text/html"
+    isValidRequest = True
+    method = 'GET'
+    url = '/'
+    versionType = 'HTTP/1.1'
     
-    try:
+    for linha in linhas[1:]:
+        splittedLine = linha.split(':')
+        isValidLine = ( splittedLine[0] and len(splittedLine[0].split(' ')) == 1 )
+        if not isValidLine:
+            isValidRequest = False
+    
+    if isValidRequest:
+        method = linha1Colunas[0]
+        url = linha1Colunas[1]
+        versionType = linha1Colunas[2]
+        
+        if method != 'GET':
+            responseCode = 501
+        elif versionType != 'HTTP/1.1':
+            responseCode = 505
+        else:
+            print('A requisicao possui suporte por esse servidor e a URL requisitada foi: {}'.format(url))
+        
         try:
-            fileURL = URL_SRC_BASE + url
-            file = open(fileURL, "rb")
-            mimeType = mimetypes.guess_type(fileURL);
-        except FileNotFoundError:
-            responseCode = 404
-        except IsADirectoryError:
-            if os.path.exists(URL_SRC_BASE + url + '/index.html'):
-                fileURL = URL_SRC_BASE + url + '/index.html'
+            try:
+                fileURL = URL_SRC_BASE + url
                 file = open(fileURL, "rb")
                 mimeType = mimetypes.guess_type(fileURL);
-            else:
+            except FileNotFoundError:
                 responseCode = 404
-                    
-        
-        if responseCode == 200:
-            fileContents = file.read()
-        elif responseCode == 404:
-            fileContents = fileNotFoundContent
+            except IsADirectoryError:
+                if os.path.exists(URL_SRC_BASE + url + '/index.html'):
+                    fileURL = URL_SRC_BASE + url + '/index.html'
+                    file = open(fileURL, "rb")
+                    mimeType = mimetypes.guess_type(fileURL);
+                else:
+                    responseCode = 404
+                        
             
-            if os.path.exists(URL_SRC_BASE + url):
-                fileContents += listDirs(url)
-    except:
-        responseCode = 500
-        fileContents = internalServerErrorFileContent
+            if responseCode == 200:
+                fileContents = file.read()
+            else:
+                fileContents = defaultFileContent[responseCode]
+            
+            if responseCode == 404:
+                if os.path.exists(URL_SRC_BASE + url):
+                    fileContents += listDirs(url)
+        except:
+            responseCode = 500
+            fileContents = defaultFileContent[500]
+    else:
+        responseCode = 400
+        fileContents = defaultFileContent[400]
     
     response = '{0} {1} {2} '.format(versionType, responseCode, messageCode[responseCode])
-    
-    # if type(fileContents) is bytes and mimeType[0] != 'text/html':
-    #     fileSplitted = url.split('/')
-    #     fileName = fileSplitted[len(fileSplitted) - 1]
-    #     response += '\n Content-Disposition: attachment; filename={0};'.format(fileName)
-    
     response += '\n Content-Type: {0}'.format(mimeType[0])
     response += '\n\n'
     
