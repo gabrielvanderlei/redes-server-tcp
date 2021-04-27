@@ -84,7 +84,7 @@ def listDirs(baseDir):
         filePath  = os.path.join(path, name)
         size = os.path.getsize(filePath)
         lastModified = os.path.getmtime(filePath)
-        fileHref = '{0}/{1}'.format(baseDir, name)
+        fileHref = '{0}'.format(name)
         
         htmlResponse += '<tr>'
         htmlResponse += '<td>{0}</td>'.format(mountHTMLLink(fileHref, name))
@@ -101,10 +101,7 @@ while True:
     
     request = clientConnection.recv(1024).decode()
     print(request)
-    
-    linhas = request.strip().split('\r\n')
-    linha1Colunas = linhas[0].split(' ')
-    
+        
     responseCode = 200
     mimeType = "text/html"
     isValidRequest = True
@@ -112,17 +109,23 @@ while True:
     url = '/'
     versionType = 'HTTP/1.1'
     
-    for linha in linhas[1:]:
-        splittedLine = linha.split(':')
-        isValidLine = ( splittedLine[0] and len(splittedLine[0].split(' ')) == 1 )
-        if not isValidLine:
-            isValidRequest = False
-    
-    if isValidRequest:
+    try:
+        linhas = request.strip().split('\r\n')
+        linha1Colunas = linhas[0].split(' ')
+        
         method = linha1Colunas[0]
         url = linha1Colunas[1]
         versionType = linha1Colunas[2]
         
+        for linha in linhas[1:]:
+            splittedLine = linha.split(':')
+            isValidLine = ( splittedLine[0] and len(splittedLine[0].split(' ')) == 1 )
+            if not isValidLine:
+                isValidRequest = False
+    except:
+        isValidRequest = False
+    
+    if isValidRequest:
         if method != 'GET':
             responseCode = 501
         elif versionType != 'HTTP/1.1':
@@ -140,6 +143,10 @@ while True:
             except IsADirectoryError:
                 if os.path.exists(URL_SRC_BASE + url + '/index.html'):
                     fileURL = URL_SRC_BASE + url + '/index.html'
+                    file = open(fileURL, "rb")
+                    mimeType = mimetypes.guess_type(fileURL);
+                elif os.path.exists(URL_SRC_BASE + url + '/index.htm'):
+                    fileURL = URL_SRC_BASE + url + '/index.htm'
                     file = open(fileURL, "rb")
                     mimeType = mimetypes.guess_type(fileURL);
                 else:
